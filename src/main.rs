@@ -8,6 +8,8 @@ use std::borrow::BorrowMut;
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::Read;
+use std::io::stdout;
+use std::io::Write;
 
 use cpu::Cpu;
 use cpu::MemIoAccess;
@@ -20,6 +22,7 @@ fn sleep(millis: u64) {
 }
 
 pub struct Peripherals {
+    verbose : u32,
     last_serial_a : u8,
     last_serial_b : u8,
     mem       : [u8;65536],
@@ -28,8 +31,9 @@ pub struct Peripherals {
 }
 
 impl Peripherals {
-    pub fn new() -> Self {
+    pub fn new(verbose : u32) -> Self {
         Self {
+            verbose,
             last_serial_a : 0,
             last_serial_b : 0,
             mem       : [0;65536],
@@ -83,7 +87,9 @@ impl MemIoAccess for Peripherals {
 
     fn write_port(&mut self, port : u16, value : u8) {
 
-        println!("Write port 0x{:04X} val 0x{:02X} ", port, value);
+        if self.verbose > 100 {
+            println!("Write port 0x{:04X} val 0x{:02X} ", port, value);
+        }
 
         match port & 0xFF {
             0x0030 => { 
@@ -107,10 +113,10 @@ pub struct Machine {
 }
 
 impl Machine {
-    pub fn new() -> Self {
+    pub fn new(verbose : u32) -> Self {
         Self {
             cpu : Cpu::new(),
-            peripherals : Peripherals::new(),
+            peripherals : Peripherals::new(verbose),
         }
     }
 
@@ -147,8 +153,10 @@ fn read_binary( target_addr: u16, machine : &mut Machine, filename:&str ) {
 
 fn main() {
 
+    let verbose = 0;
+
     println!("Starting Z80_Take1 v0.1a!");
-    let mut machine = Machine::new();
+    let mut machine = Machine::new(verbose);
 
     let filename = ".\\asm\\asm.bin";
     read_binary( 0, machine.borrow_mut(), filename );
@@ -172,6 +180,7 @@ fn main() {
     let mut buffer: Vec<u32> = Vec::with_capacity(WIDTH * HEIGHT);
 
     let mut size = (0, 0);
+    let mut cycles = 0;
 
     while window.is_open() && !window.is_key_down(Key::Escape) {
         let new_size = (window.get_size().0, window.get_size().1);
@@ -200,14 +209,22 @@ fn main() {
             print!( "{}", char::from( ch ) );
         }
 
-        println!(" PC:0x{:04X} a:0x{:02X} bc:0x{:04X} de:0x{:04X} hl:0x{:04X} sp:0x{:04X}", 
-            machine.cpu.pc, 
-            machine.cpu.registers.a,
-            machine.cpu.registers.get_bc(),
-            machine.cpu.registers.get_de(),
-            machine.cpu.registers.get_hl(),
-            machine.cpu.registers.sp);
+        if verbose > 10 {
+            println!(" PC:0x{:04X} a:0x{:02X} bc:0x{:04X} de:0x{:04X} hl:0x{:04X} sp:0x{:04X}", 
+                machine.cpu.pc, 
+                machine.cpu.registers.a,
+                machine.cpu.registers.get_bc(),
+                machine.cpu.registers.get_de(),
+                machine.cpu.registers.get_hl(),
+                machine.cpu.registers.sp);
+        }
+
+        if cycles %100  == 0 {
+            stdout().flush();
+        }
+
         machine.next();
         sleep(10);
+        cycles+=1;
     }
 }

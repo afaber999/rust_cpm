@@ -137,7 +137,7 @@ impl Registers {
         (self.e as u16 ) + ((self.d as u16) << 8)
     }
 
-    pub fn set_dec(&mut self, val : u16) {
+    pub fn set_de(&mut self, val : u16) {
         self.d = (val >> 8) as u8;
         self.e = (val & 0xFF) as u8;
     }
