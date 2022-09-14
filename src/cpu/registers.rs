@@ -134,7 +134,7 @@ impl Registers {
     }
 
     pub fn get_de(&self) -> u16 {
-        (self.d as u16 ) + ((self.e as u16) << 8)
+        (self.e as u16 ) + ((self.d as u16) << 8)
     }
 
     pub fn set_dec(&mut self, val : u16) {
@@ -151,12 +151,28 @@ impl Registers {
         self.l = (val & 0xFF) as u8;
     }
 
+    pub fn dec_bc(&mut self) {
+        if self.c == 0 {
+            self.b = u8::wrapping_sub( self.b, 1);
+        }
+        self.c = u8::wrapping_sub(self.c,1);
+    }
+
+
+    pub fn inc_de(&mut self) {
+        self.e = u8::wrapping_add(self.e,1);
+        if self.e == 0 {
+            self.d = u8::wrapping_add(self.d,1);
+        }
+    }
+
     pub fn inc_hl(&mut self) {
         self.l = u8::wrapping_add(self.l,1);
         if self.l == 0 {
             self.h = u8::wrapping_add(self.h,1);
         }
     }
+
 
     pub fn get_f(&mut self) -> u8 {
         let mut ret = 0;

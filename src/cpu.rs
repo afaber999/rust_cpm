@@ -36,7 +36,7 @@ impl Cpu {
         
         let acc = u8::wrapping_add(a, bc);
 
-        self.registers.flag_s = acc & 0x80 != 0;
+        self.registers.flag_s = (acc & 0x80) != 0;
         self.registers.flag_z = acc==0;
 
         self.registers.flag_h = (a & 0b00001000 != 0) && (bc & 0b00001000 != 0);
@@ -48,12 +48,144 @@ impl Cpu {
         acc
     }
 
+    fn calc_parity(val : u8 ) -> bool {
+        // set when bits are even
+        let mut mask = 0b00000001; 
+        let mut parity = false;
+        for _ in 0..=7 {
+            if (val & mask) != 0 {
+                parity = !parity;
+            }
+            mask <<= 1;
+        }
+        parity
+    }
+
+    fn and8(&mut self, a : u8 , b : u8) -> u8 {
+        let acc = a & b;
+        self.registers.flag_s = (acc & 0x80) != 0;
+        self.registers.flag_z = acc==0;
+        self.registers.flag_h = true;
+        self.registers.flag_p = Cpu::calc_parity(acc);
+        self.registers.flag_n = false;
+        self.registers.flag_c = false;
+        acc
+    }
+
+    fn or8(&mut self, a : u8 , b : u8 ) -> u8 {
+        let acc = a & b;
+        self.registers.flag_s = (acc & 0x80) != 0;
+        self.registers.flag_z = acc==0;
+        self.registers.flag_h = true;
+        self.registers.flag_p = Cpu::calc_parity(acc);
+        self.registers.flag_n = false;
+        self.registers.flag_c = false;
+        acc
+    }
+
+    fn xor8(&mut self, a : u8 , b : u8 ) -> u8 {
+        let acc = a ^ b;
+        self.registers.flag_s = (acc & 0x80) != 0;
+        self.registers.flag_z = acc==0;
+        self.registers.flag_h = true;
+        self.registers.flag_p = Cpu::calc_parity(acc);
+        self.registers.flag_n = false;
+        self.registers.flag_c = false;
+        acc
+    }
+
+    fn rl8(&mut self,val : u8 ) -> u8 {
+        let mut res = val;
+        
+        let nc = (res & 0b1000000 ) != 0;
+
+        res <<=1;
+        if self.registers.flag_c {
+            res |= 0b00000001;
+        }
+        self.registers.flag_c = nc;
+        self.registers.flag_z = res == 0;
+        self.registers.flag_s = (res & 0x80 ) != 0;
+        self.registers.flag_p = Cpu::calc_parity(res);
+        self.registers.flag_h = false;
+        self.registers.flag_n = false;
+        res
+    }
+
+
+    fn rlc8(&mut self,val : u8 ) -> u8 {
+        let mut res = val;
+        self.registers.flag_c = (res & 0b1000000 ) != 0;
+        res <<=1;
+        if self.registers.flag_c {
+            res |= 0b00000001;
+        }
+        self.registers.flag_z = res == 0;
+        self.registers.flag_s = (res & 0x80 ) != 0;
+        self.registers.flag_p = Cpu::calc_parity(res);
+        self.registers.flag_h = false;
+        self.registers.flag_n = false;
+        res
+    }
+
+    fn rrc8(&mut self,val : u8 ) -> u8 {
+        let mut res = val;
+        self.registers.flag_c = (res & 0b0000001 ) != 0;
+        res >>=1;
+        if self.registers.flag_c {
+            res |= 0b10000000;
+        }
+        self.registers.flag_z = res == 0;
+        self.registers.flag_s = (res & 0x80 ) != 0;
+        self.registers.flag_p = Cpu::calc_parity(res);
+        self.registers.flag_h = false;
+        self.registers.flag_n = false;
+        res
+    }
+
+    fn rr8(&mut self,val : u8 ) -> u8 {
+        let mut res = val;
+        let nc = (res & 0b0000001 ) != 0;
+        res >>=1;
+        if self.registers.flag_c {
+            res |= 0b10000000;
+        }
+        self.registers.flag_c = nc;
+        self.registers.flag_z = res == 0;
+        self.registers.flag_s = (res & 0x80 ) != 0;
+        self.registers.flag_p = Cpu::calc_parity(res);
+        self.registers.flag_h = false;
+        self.registers.flag_n = false;
+        res
+    }
+
+    fn inc8(&mut self, a : u8  ) -> u8 {
+        let acc = u8::wrapping_add(a, 1);
+        self.registers.flag_s = (acc & 0x80) != 0;
+        self.registers.flag_z = acc==0;
+        self.registers.flag_h = false;
+        self.registers.flag_p = a == 0xFE;
+        self.registers.flag_n = false;
+        acc
+    }
+
+    fn dec8(&mut self, a : u8  ) -> u8 {
+        let acc = u8::wrapping_sub(a, 1);
+        self.registers.flag_s = (acc & 0x80) != 0;
+        self.registers.flag_z = acc==0;
+        self.registers.flag_h = false;// AF BORROW BIT?
+        self.registers.flag_p = a == 0x80;
+        self.registers.flag_n = false;
+        acc
+    }
+
     fn sub8( &mut self, a : u8, b : u8, c : bool) -> u8 {
         let res = self.add8(a, !b, !c);
         self.registers.flag_n = true;
         self.registers.flag_c = !self.registers.flag_c;
         res
     }
+
 
     fn stack_pop_byte(&mut self, memio: &dyn MemIoAccess) -> u8 {
         let ret = memio.read_mem( self.registers.sp );
@@ -66,7 +198,6 @@ impl Cpu {
         let vh = self.stack_pop_byte( memio ) as u16;
         u16::wrapping_add( vl, vh << 8 )
     }
-
 
     fn stack_push_byte(&mut self, memio: &mut dyn MemIoAccess, val : u8) {
         self.registers.sp = u16::wrapping_sub( self.registers.sp, 1 );
@@ -127,6 +258,83 @@ impl Cpu {
         }
     }
 
+    pub fn next_cb( &mut self, memio: &mut dyn MemIoAccess) {
+        // get next byte
+        let op_byte = self.next_byte(memio);
+        match op_byte {
+            // ** RLC r
+            0x00 | 0x01 | 0x02 | 0x03 | 0x04 | 0x05 | 0x07 =>  {
+                let r = Cpu::get_r_src(op_byte);
+                let val = self.registers.get_r8(r);
+
+                let res = self.rlc8(val);
+                self.registers.set_r8(r,res);
+                self.states = self.states + 8;
+            }
+            // RLC (HL)
+            0x06 =>  {
+                let hl = self.registers.get_hl();
+                let val = memio.read_mem(hl);
+                let res = self.rlc8(val);
+                memio.write_mem(hl, res);
+            }
+
+            // ** RRC r
+            0x08 | 0x09 | 0x0A | 0x0B | 0x0C | 0x0D | 0x0F =>  {
+                let r = Cpu::get_r_src(op_byte);
+                let val = self.registers.get_r8(r);
+
+                let res = self.rrc8(val);
+                self.registers.set_r8(r,res);
+                self.states = self.states + 8;
+            }
+            // RRC (HL)
+            0x0E =>  {
+                let hl = self.registers.get_hl();
+                let val = memio.read_mem(hl);
+                let res = self.rrc8(val);
+                memio.write_mem(hl, res);
+            }
+
+            // ** RL r
+            0x10 | 0x11 | 0x12 | 0x13 | 0x14 | 0x15 | 0x17 =>  {
+                let r = Cpu::get_r_src(op_byte);
+                let val = self.registers.get_r8(r);
+
+                let res = self.rl8(val);
+                self.registers.set_r8(r,res);
+                self.states = self.states + 8;
+            }
+            // RL (HL)
+            0x16 =>  {
+                let hl = self.registers.get_hl();
+                let val = memio.read_mem(hl);
+                let res = self.rl8(val);
+                memio.write_mem(hl, res);
+            }
+
+            // ** RR r
+            0x18 | 0x19 | 0x1A | 0x1B | 0x1C | 0x1D | 0x1F =>  {
+                let r = Cpu::get_r_src(op_byte);
+                let val = self.registers.get_r8(r);
+
+                let res = self.rr8(val);
+                self.registers.set_r8(r,res);
+                self.states = self.states + 8;
+            }
+            // RR (HL)
+            0x1E =>  {
+                let hl = self.registers.get_hl();
+                let val = memio.read_mem(hl);
+                let res = self.rr8(val);
+                memio.write_mem(hl, res);
+            }
+
+            _ => {panic!("Unknown extended instruction 0xCB 0x{:02X}", op_byte);}
+        }
+    }
+
+
     pub fn next( &mut self, memio: &mut dyn MemIoAccess) {
 
         // get next byte
@@ -155,13 +363,19 @@ impl Cpu {
                 self.states = self.states + 10;
             }
 
-
             //** LD (BC), A **
             0x02 => {
                 memio.write_mem( self.registers.get_bc(), self.registers.a );
                 self.states = self.states + 7;
             }
 
+            // ** LD (HL) <- n
+            0x36 =>{
+                let addr = self.registers.get_hl();
+                let val = self.next_byte(memio);
+                memio.write_mem( addr, val );
+                self.states = self.states + 10;
+            }
 
             //** INC BC **
             0x03 => {
@@ -169,23 +383,29 @@ impl Cpu {
                 self.states = self.states + 6;
             }
 
-
             //** INC R **
             0x04 | 0x0C | 0x14 | 0x1C | 0x24 | 0x2C => {
                 let r = Cpu::get_r_dst(op_byte);
                 let rval = self.registers.get_r8( r );
-
-                let carry_save = self.registers.flag_c;
-                let res = self.add8( rval, 1, false );
-                self.registers.flag_c = carry_save;
-
+                let res = self.inc8( rval );
                 self.registers.set_r8( r, res );
                 self.states = self.states + 4;
             }
 
-            //** DEC B **
-            0x05 => {
-                self.registers.b = u8::wrapping_sub(self.registers.b, 1 );
+            //** INC (HL) **
+            0x34 => {
+                let val = memio.read_mem(self.registers.get_hl());
+                let res = self.inc8( val );
+                memio.write_mem(self.registers.get_hl(), res);
+                self.states = self.states + 11;
+            }
+
+            //** DEC r **
+            0x05 | 0x0D | 0x15 | 0x1D | 0x25 | 0x2D | 0x3D  => {
+                let r = Cpu::get_r_dst(op_byte);
+                let rval = self.registers.get_r8( r );
+                let res = self.dec8( rval );
+                self.registers.set_r8( r, res );
                 self.states = self.states + 4;
             }
 
@@ -217,6 +437,7 @@ impl Cpu {
                 self.registers.a = memio.read_port(p);
                 self.states = self.states + 11;
             }
+
 
             // ** OUT (n),A **
             0xD3 => {
@@ -299,7 +520,7 @@ impl Cpu {
                 self.states = self.states + 4;
             },
 
-            // ** ADD A,n  ADC A,n
+            // ** SUB A,n  SUB A,n
             0xD6 | 0xDE => {
                 let cin = op_byte == 0xDE;
                 let val = self.next_byte(memio);
@@ -307,7 +528,7 @@ impl Cpu {
                 self.states = self.states + 7;
             },
 
-            // ** ADD A, (HL)  ADC A, (HL)
+            // ** SUB A, (HL)  SBC A, (HL)
             0x96 | 0x9E => {
                 let cin = op_byte == 0x9E;
                 let val = memio.read_mem(self.registers.get_hl());
@@ -315,6 +536,97 @@ impl Cpu {
                 self.states = self.states + 7;
             },
 
+            // ** AND A, r
+            0xA0 | 0xA1 | 0xA2 | 0xA3 | 0xA4 | 0xA5 | 0xA7 => {
+                let r = Cpu::get_r_dst(op_byte);
+                let val = self.registers.get_r8(r);
+                self.registers.a = self.and8(self.registers.a, val);
+                self.states = self.states + 4;
+            },
+
+            // ** AND A,n
+            0xE6 => {
+                let val = self.next_byte(memio);
+                self.registers.a = self.and8(self.registers.a, val);
+                self.states = self.states + 7;
+            },
+
+            // ** AND A, (HL)
+            0xA6 => {
+                let val = memio.read_mem(self.registers.get_hl());
+                self.registers.a = self.and8(self.registers.a, val);
+                self.states = self.states + 7;
+            },
+
+            // ** OR A, r
+            0xB0 | 0xB1 | 0xB2 | 0xB3 | 0xB4 | 0xB5 | 0xB7 => {
+                let r = Cpu::get_r_dst(op_byte);
+                let val = self.registers.get_r8(r);
+                self.registers.a = self.or8(self.registers.a, val);
+                self.states = self.states + 4;
+            },
+
+            // ** OR A,n
+            0xF6 => {
+                let val = self.next_byte(memio);
+                self.registers.a = self.or8(self.registers.a, val);
+                self.states = self.states + 7;
+            },
+
+            // ** OR A, (HL)
+            0xB6 => {
+                let val = memio.read_mem(self.registers.get_hl());
+                self.registers.a = self.or8(self.registers.a, val);
+                self.states = self.states + 7;
+            },
+
+            // ** XOR A, r
+            0xA8 | 0xA9 | 0xAA | 0xAB | 0xAC | 0xAD | 0xAF => {
+                let r = Cpu::get_r_dst(op_byte);
+                let val = self.registers.get_r8(r);
+                self.registers.a = self.xor8(self.registers.a, val);
+                self.states = self.states + 4;
+            },
+
+            // ** XOR A,n
+            0xEE => {
+                let val = self.next_byte(memio);
+                self.registers.a = self.xor8(self.registers.a, val);
+                self.states = self.states + 7;
+            },
+
+            // ** XOR A, (HL)
+            0xAE => {
+                let val = memio.read_mem(self.registers.get_hl());
+                self.registers.a = self.xor8(self.registers.a, val);
+                self.states = self.states + 7;
+            },
+
+
+            // ** CP A, r
+            0xB8 | 0xB9 | 0xBA | 0xBB | 0xBC | 0xBD | 0xBF => {
+                let r = Cpu::get_r_dst(op_byte);
+                let val = self.registers.get_r8(r);
+                _ = self.sub8(self.registers.a, val , false);
+                self.states = self.states + 4;
+            },
+
+            // ** CP A,n
+            0xFE => {
+                let cin = op_byte == 0xDE;
+                let val = self.next_byte(memio);
+                self.registers.a = self.sub8(self.registers.a, val , cin);
+                self.states = self.states + 7;
+            },
+            
+            // ** CP A, (HL)
+            0xBE => {
+                let val = memio.read_mem(self.registers.get_hl());
+                _ = self.sub8(self.registers.a, val , false);
+                self.states = self.states + 7;
+            },
+
+            
             // ** JP nn **
             0xC3 => 
             {
@@ -446,20 +758,141 @@ impl Cpu {
                         self.states = self.states + 19;
                     },
 
+                    // ** AND A, (IX +d)
+                    0xA6 => {
+                        let d = self.next_byte(memio);
+                        let addr = u16::wrapping_add(self.registers.ix, d.into());
+                        let val = memio.read_mem(addr);
+                        self.registers.a = self.and8(self.registers.a, val );
+                        self.states = self.states + 19;
+                    },
+
+                    // ** OR A, (IX +d)
+                    0xB6 => {
+                        let d = self.next_byte(memio);
+                        let addr = u16::wrapping_add(self.registers.ix, d.into());
+                        let val = memio.read_mem(addr);
+                        self.registers.a = self.or8(self.registers.a, val );
+                        self.states = self.states + 19;
+                    },
+
+                    // ** XOR A, (IX +d)
+                    0xAE => {
+                        let d = self.next_byte(memio);
+                        let addr = u16::wrapping_add(self.registers.ix, d.into());
+                        let val = memio.read_mem(addr);
+                        self.registers.a = self.xor8(self.registers.a, val );
+                        self.states = self.states + 19;
+                    },
+
+                    // ** CP A, (IX +d)
+                    0xBE => {
+                        let d = self.next_byte(memio);
+                        let addr = u16::wrapping_add(self.registers.ix, d.into());
+                        let val = memio.read_mem(addr);
+                        _ = self.sub8(self.registers.a, val,false);
+                        self.states = self.states + 19;
+                    },
+
+                    // ** INC (IX +d)
+                    0x34 => {
+                        let d = self.next_byte(memio);
+                        let addr = u16::wrapping_add(self.registers.ix, d.into());
+                        let val = memio.read_mem(addr);
+                        let res = self.inc8(val);
+                        memio.write_mem(addr, res);
+                        self.states = self.states + 23;
+                    },
+
                     // ** JP (IX)
                     0xE9 => 
                     {
                         self.pc = Cpu::get_mem_word(memio, self.registers.ix);
                         self.states = self.states + 8;
                     },
-                    _ => {panic!("Unknown extended instruction 0xDD 0x{:02X}", op_byte);}
+                    
+                    // ** CB extended
+                    0xCB => {
+                        let d = self.next_byte(memio);
+                        let ext_ext_op_byte = self.next_byte(memio);
+
+                        match ext_ext_op_byte {
+                            // RLC (IX+d)
+                            0x06 =>  {
+                                let addr = u16::wrapping_add(self.registers.ix, d.into());
+                                let val = memio.read_mem(addr);
+                                let res = self.rlc8(val);
+                                memio.write_mem(addr, res);
+                            },
+                            // RRC (IX+d)
+                            0x0E =>  {
+                                let addr = u16::wrapping_add(self.registers.ix, d.into());
+                                let val = memio.read_mem(addr);
+                                let res = self.rrc8(val);
+                                memio.write_mem(addr, res);
+                            },
+                            // RL (IX+d)
+                            0x16 =>  {
+                                let addr = u16::wrapping_add(self.registers.ix, d.into());
+                                let val = memio.read_mem(addr);
+                                let res = self.rl8(val);
+                                memio.write_mem(addr, res);
+                            },
+                            // RR (IX+d)
+                            0x1E =>  {
+                                let addr = u16::wrapping_add(self.registers.ix, d.into());
+                                let val = memio.read_mem(addr);
+                                let res = self.rr8(val);
+                                memio.write_mem(addr, res);
+                            },
+                            _ => {panic!("Unknown extended instruction 0xDD 0xCB 0x{:02X}", ext_ext_op_byte);}
+
+                        }
+                    }
+                                // RLC (HL)
+            0x06 =>  {
+                let hl = self.registers.get_hl();
+                let val = memio.read_mem(hl);
+                let res = self.rlc8(val);
+                memio.write_mem(hl, res);
+            }
+
+                    _ => {panic!("Unknown extended instruction 0xDD 0x{:02X}", ext_op_byte);}
                 }
+            }
+
+            0xCB => {
+                self.next_cb(memio);
             }
 
             0xED => {
                 let ext_op_byte = self.next_byte(memio);
 
                 match ext_op_byte {
+
+            // ** IN A,(n) **
+            0xDB => {
+                let p = self.next_byte(memio) as u16 + (self.registers.a as u16) << 8;
+                self.registers.a = memio.read_port(p);
+                self.states = self.states + 11;
+            }
+                    // ** IN r, (C)*
+                    0x40 | 0x48 | 0x50 | 0x58 | 0x60 | 0x68 | 0x78 => {
+                        let r = Cpu::get_r_dst(ext_op_byte);
+                        let p = self.registers.get_bc();
+                        let val = memio.read_port(p);                       
+                        self.registers.set_r8(r, val);
+                        
+
+                        self.registers.flag_s = (val > 0x80);
+                        self.registers.flag_z = val == 0;
+                        self.registers.flag_h = false;
+                        self.registers.flag_p = Cpu::calc_parity(val);
+                        self.registers.flag_n = false;
+
+                        self.states = self.states + 12;
+                    },
+
                     // ** OUT (C),r*
                     0x41 | 0x49 | 0x51 | 0x59 | 0x61 | 0x69 | 0x79 => {
                         let r = Cpu::get_r_dst(ext_op_byte);
@@ -469,7 +902,30 @@ impl Cpu {
                         let rval = self.registers.get_r8(r);
                         memio.write_port(p, rval);
                         self.states = self.states + 12;
+                    },
+
+                    // ** LDIR **
+                    0xB0 => {
+                        let val = memio.read_mem(self.registers.get_hl());
+                        memio.write_mem( self.registers.get_de(), val);
+                        self.registers.inc_de();
+                        self.registers.inc_hl();
+                        self.registers.dec_bc();
+
+                        let bc = self.registers.get_bc();
+                        
+                        if bc != 0 {
+                            self.pc = self.pc - 0x0002;
+                            self.states = self.states + 21;
+                        } else {
+
+                            self.registers.flag_h = false;
+                            self.registers.flag_p = false;
+                            self.registers.flag_n = false;
+                            self.states = self.states + 16;
+                        }
                     }
+
                     // ** OTIR **
                     0xB3 => {
                         let val = memio.read_mem(self.registers.get_hl());
@@ -488,7 +944,7 @@ impl Cpu {
                             self.states = self.states + 16;
                         }
                     }
-                    _ => {panic!("Unknown extended instruction 0xED 0x{:02X}", op_byte);}
+                    _ => {panic!("Unknown extended instruction 0xED 0x{:02X}", ext_op_byte);}
                 }
             },
 
@@ -516,22 +972,103 @@ impl Cpu {
                         self.states = self.states + 19;
                     },
 
+                    // ** AND A, (IY +d)
+                    0xA6 => {
+                        let d = self.next_byte(memio);
+                        let addr = u16::wrapping_add(self.registers.iy, d.into());
+                        let val = memio.read_mem(addr);
+                        self.registers.a = self.and8(self.registers.a, val );
+                        self.states = self.states + 19;
+                    },
+
+                    // ** OR A, (IY +d)
+                    0xB6 => {
+                        let d = self.next_byte(memio);
+                        let addr = u16::wrapping_add(self.registers.iy, d.into());
+                        let val = memio.read_mem(addr);
+                        self.registers.a = self.or8(self.registers.a, val );
+                        self.states = self.states + 19;
+                    },
+
+                    // ** XOR A, (IY +d)
+                    0xAE => {
+                        let d = self.next_byte(memio);
+                        let addr = u16::wrapping_add(self.registers.iy, d.into());
+                        let val = memio.read_mem(addr);
+                        self.registers.a = self.xor8(self.registers.a, val );
+                        self.states = self.states + 19;
+                    },
+
+                    // ** CP A, (IY +d)
+                    0xBE => {
+                        let d = self.next_byte(memio);
+                        let addr = u16::wrapping_add(self.registers.iy, d.into());
+                        let val = memio.read_mem(addr);
+                        _ = self.sub8(self.registers.a, val,false);
+                        self.states = self.states + 19;
+                    },
+
+                    // ** INC (IY +d)
+                    0x34 => {
+                        let d = self.next_byte(memio);
+                        let addr = u16::wrapping_add(self.registers.iy, d.into());
+                        let val = memio.read_mem(addr);
+                        let res = self.inc8(val);
+                        memio.write_mem(addr, res);
+                        self.states = self.states + 23;
+                    },
+
                     // ** JP (IY)
                     0xE9 => 
                     {
                         self.pc = Cpu::get_mem_word(memio, self.registers.iy);
                         self.states = self.states + 8;
                     },
-                    _ => {panic!("Unknown extended instruction 0xFD 0x{:02X}", op_byte);}
+
+                    // ** CB extended
+                    0xCB => {
+                        let d = self.next_byte(memio);
+                        let ext_ext_op_byte = self.next_byte(memio);
+
+                        match ext_ext_op_byte {
+                            // RLC (IY+d)
+                            0x06 =>  {
+                                let addr = u16::wrapping_add(self.registers.iy, d.into());
+                                let val = memio.read_mem(addr);
+                                let res = self.rlc8(val);
+                                memio.write_mem(addr, res);
+                            },
+                            // RRC (IY+d)
+                            0x0E =>  {
+                                let addr = u16::wrapping_add(self.registers.iy, d.into());
+                                let val = memio.read_mem(addr);
+                                let res = self.rrc8(val);
+                                memio.write_mem(addr, res);
+                            },
+                            // RL (IY+d)
+                            0x16 =>  {
+                                let addr = u16::wrapping_add(self.registers.iy, d.into());
+                                let val = memio.read_mem(addr);
+                                let res = self.rl8(val);
+                                memio.write_mem(addr, res);
+                            },
+                            // RR (IY+d)
+                            0x1E =>  {
+                                let addr = u16::wrapping_add(self.registers.iy, d.into());
+                                let val = memio.read_mem(addr);
+                                let res = self.rr8(val);
+                                memio.write_mem(addr, res);
+                            },
+                            _ => {panic!("Unknown extended instruction 0xDD 0xCB 0x{:02X}", ext_ext_op_byte);}
+
+                        }
+                    },
+                    _ => {panic!("Unknown extended instruction 0xFD 0x{:02X}", ext_op_byte);}
                 }
             },
 
             _ => {panic!("Unknown instruction 0x{:02X}", op_byte);}
         }
-
-
-
-
 
         // // LD r <- (HL)
         // if (op_byte & 0b11000111 ) == 0b00000110 {
@@ -634,14 +1171,6 @@ impl Cpu {
         //     }
         // }
 
-        // // LD (HL) <- n
-        // if op_byte == 0x36 {
-        //     let addr = self.registers.get_hl();
-        //     let val = self.next_byte(memio);
-        //     memio.write_mem( addr, val );
-        //     self.states = self.states + 10;
-        //     return;            
-        // }
 
         // // LD A <- (BC)
         // if op_byte == 0x0A {
@@ -713,5 +1242,3 @@ impl Cpu {
         // //memio.write_mem(1, memio.read_mem( 0000 ) + 1);
     }
 }
-
-

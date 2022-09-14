@@ -22,7 +22,7 @@ fn sleep(millis: u64) {
 pub struct Peripherals {
     last_serial_a : u8,
     last_serial_b : u8,
-    mem       : [u8;62536],
+    mem       : [u8;65536],
     in_keys   : VecDeque<u8>,
     out_chars : VecDeque<u8>,
 }
@@ -32,7 +32,7 @@ impl Peripherals {
         Self {
             last_serial_a : 0,
             last_serial_b : 0,
-            mem       : [0;62536],
+            mem       : [0;65536],
             in_keys   : VecDeque::with_capacity(128),
             out_chars : VecDeque::with_capacity(128),
         }
@@ -56,7 +56,8 @@ impl MemIoAccess for Peripherals {
         self.mem[address as usize] = value;
     }
     fn read_port(&mut self, port : u16) -> u8 {
-        match port & 0xFF {
+        let mp = port & 0xFF;
+        match mp {
             0x0030 => { 
                 if let Some(c) = self.in_keys.pop_front() {
                     self.last_serial_a = c;
@@ -76,18 +77,23 @@ impl MemIoAccess for Peripherals {
             0x0033 => { 
                 0b00000100
             },
-            _ => {panic!("invalid read port 0x{:04X}", port)},
+            _ => {panic!("invalid read port 0x{:02X}  0x{:04X}", mp, port)},
         }
     }
 
     fn write_port(&mut self, port : u16, value : u8) {
 
         println!("Write port 0x{:04X} val 0x{:02X} ", port, value);
+
         match port & 0xFF {
             0x0030 => { 
                 self.out_chars.push_back(value);
             },
             0x0031 => { 
+            },
+            0x0032 => { 
+            },
+            0x0033 => { 
             },
             _ => {panic!("invalid write port 0x{:04X}", port)},
         }
@@ -144,7 +150,7 @@ fn main() {
     println!("Starting Z80_Take1 v0.1a!");
     let mut machine = Machine::new();
 
-    let filename = "D:\\rust\\z80\\z80_take1\\asm\\asm.bin";
+    let filename = ".\\asm\\asm.bin";
     read_binary( 0, machine.borrow_mut(), filename );
     
     
@@ -194,12 +200,14 @@ fn main() {
             print!( "{}", char::from( ch ) );
         }
 
-        println!(" PC:0x{:04X} b:0x{:02X} hl:0x{:04X} sp:0x{:04X}", 
+        println!(" PC:0x{:04X} a:0x{:02X} bc:0x{:04X} de:0x{:04X} hl:0x{:04X} sp:0x{:04X}", 
             machine.cpu.pc, 
-            machine.cpu.registers.b,
+            machine.cpu.registers.a,
+            machine.cpu.registers.get_bc(),
+            machine.cpu.registers.get_de(),
             machine.cpu.registers.get_hl(),
             machine.cpu.registers.sp);
         machine.next();
-        sleep(1000);
+        sleep(10);
     }
 }
