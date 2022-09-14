@@ -149,7 +149,7 @@ fn main() {
     
     
     let mut window = Window::new(
-        "Noise Test - Press ESC to exit",
+        "Z80 CP/M system",
         WIDTH,
         HEIGHT,
         WindowOptions {
