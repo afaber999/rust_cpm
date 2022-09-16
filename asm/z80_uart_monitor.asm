@@ -225,7 +225,6 @@ skip:
     LD DE, BUFFER
        
     CALL otext
-    halt
     CALL OUTCRLF
     
 

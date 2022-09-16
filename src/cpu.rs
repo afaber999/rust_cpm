@@ -323,7 +323,7 @@ impl Cpu {
 
                 let res = self.rlc8(val);
                 self.registers.set_r8(r,res);
-                self.add_states( 8 );
+                self.add_states(8);
             },
             // RLC (HL)
             0x06 =>  {
@@ -340,7 +340,7 @@ impl Cpu {
 
                 let res = self.rrc8(val);
                 self.registers.set_r8(r,res);
-                self.add_states( 8 );
+                self.add_states(8);
             },
             // RRC (HL)
             0x0E =>  {
@@ -357,7 +357,7 @@ impl Cpu {
 
                 let res = self.rl8(val);
                 self.registers.set_r8(r,res);
-                self.add_states( 8 );
+                self.add_states(8);
             },
             // RL (HL)
             0x16 =>  {
@@ -374,7 +374,7 @@ impl Cpu {
 
                 let res = self.rr8(val);
                 self.registers.set_r8(r,res);
-                self.add_states( 8 );
+                self.add_states(8);
             },
             // RR (HL)
             0x1E =>  {
@@ -391,7 +391,7 @@ impl Cpu {
 
                 let res = self.sla8(val);
                 self.registers.set_r8(r,res);
-                self.add_states( 8 );
+                self.add_states(8);
             },
             // SLA (HL)
             0x26 =>  {
@@ -408,7 +408,7 @@ impl Cpu {
 
                 let res = self.sra8(val);
                 self.registers.set_r8(r,res);
-                self.add_states( 8 );
+                self.add_states(8);
             }
             // SRA (HL)
             0x2E =>  {
@@ -425,7 +425,7 @@ impl Cpu {
 
                 let res = self.srl8(val);
                 self.registers.set_r8(r,res);
-                self.add_states( 8 );
+                self.add_states(8);
             }
             // SRL (HL)
             0x3E =>  {
@@ -559,7 +559,14 @@ impl Cpu {
                 self.add_states(7);
             },
 
-            // RLCA
+            // ** LD HL, (nn)
+            0x2A => {
+                let val = self.next_word(memio);
+                self.registers.set_hl(val);
+                self.add_states(16);
+            },            
+
+            // ** RLCA
             0x07 => {
                 let flag_s = self.registers.flag_s;
                 let flag_z = self.registers.flag_z;
@@ -633,7 +640,7 @@ impl Cpu {
                     self.jump_relative(jr);
                     self.add_states( 13 );
                 } else {
-                    self.add_states( 8 );
+                    self.add_states(8);
                 }
             }
 
@@ -1054,6 +1061,19 @@ impl Cpu {
                         self.add_states(14);
                     },
 
+                    // ** LD IX, (nn)
+                    0x2A => {
+                        let val = self.next_word(memio);
+                        self.registers.ix = val;
+                        self.add_states(20);
+                    },
+
+                    // ** LD SP, IX
+                    0xF9 => {
+                        self.registers.sp = self.registers.ix;
+                        self.add_states(10);
+                    },
+
                     //** INC IX **
                     0x23 => {
                         self.registers.ix = u16::wrapping_add(self.registers.ix, 1 );
@@ -1155,9 +1175,21 @@ impl Cpu {
                     0xE9 => 
                     {
                         self.pc = Cpu::get_mem_word(memio, self.registers.ix);
-                        self.add_states( 8 );
+                        self.add_states(8);
                     },
-                    
+
+                    // ** POP IX **
+                    0xE1 => {
+                        self.registers.ix = self.stack_pop_word(memio); 
+                        self.add_states(14);
+                    },
+
+                    // ** PUSH IX **
+                    0xE5 => {
+                        self.stack_push_word(memio, self.registers.ix);
+                        self.add_states(15);
+                    },
+
                     // ** CB extended
                     0xCB => {
                         let d = self.next_byte(memio);
@@ -1372,13 +1404,26 @@ impl Cpu {
                         self.registers.iy = self.next_word(memio);
                         self.add_states(14);
                     },
+                    // ** LD IY, (nn)
+                    0x2A => {
+                        let val = self.next_word(memio);
+                        self.registers.iy = val;
+                        self.add_states(20);
+                    },            
+
+                    // ** LD SP, IX
+                    0xF9 => {
+                        self.registers.sp = self.registers.iy;
+                        self.add_states(10);
+                    },
+
 
                     //** INC IY **
                     0x23 => {
                         self.registers.iy = u16::wrapping_add(self.registers.iy, 1 );
                         self.add_states(10);
                     },
-
+                    
                     //** DEC IY **
                     0x2B => {
                         self.registers.iy = u16::wrapping_sub(self.registers.iy, 1 );
@@ -1475,7 +1520,19 @@ impl Cpu {
                     0xE9 => 
                     {
                         self.pc = Cpu::get_mem_word(memio, self.registers.iy);
-                        self.add_states( 8 );
+                        self.add_states(8);
+                    },
+
+                    // ** POP IY **
+                    0xE1 => {
+                        self.registers.iy = self.stack_pop_word(memio); 
+                        self.add_states(14);
+                    },
+
+                    // ** PUSH IY **
+                    0xE5 => {
+                        self.stack_push_word(memio, self.registers.iy);
+                        self.add_states(15);
                     },
 
                     // ** CB extended

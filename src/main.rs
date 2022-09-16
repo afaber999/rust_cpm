@@ -176,7 +176,7 @@ impl minifb::InputCallback for Input {
 
 fn main() {
 
-    let verbose = 300;
+    let verbose = 0;
 
     println!("Starting Z80_Take1 v0.1a!");
     let mut machine = Machine::new(verbose);
