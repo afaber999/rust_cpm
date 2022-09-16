@@ -1,4 +1,6 @@
 use minifb::{Key, ScaleMode, Window, WindowOptions};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 const WIDTH: usize = 640 / 2;
 const HEIGHT: usize = 360 / 2;
@@ -73,6 +75,7 @@ impl MemIoAccess for Peripherals {
             },
             0x0032 => {
                 if self.in_keys.len() > 0 {
+                    //println!("GOT LEN {} ", self.in_keys.len()); 
                     0b00000101
                 } else {
                     0b00000100
@@ -87,13 +90,14 @@ impl MemIoAccess for Peripherals {
 
     fn write_port(&mut self, port : u16, value : u8) {
 
-        if self.verbose > 100 {
+        if self.verbose > 90 {
             println!("Write port 0x{:04X} val 0x{:02X} ", port, value);
         }
 
         match port & 0xFF {
             0x0030 => { 
                 self.out_chars.push_back(value);
+                //panic!("IO BREAK");
             },
             0x0031 => { 
             },
@@ -123,8 +127,8 @@ impl Machine {
     pub fn reset(&mut self) {
     }
 
-    pub fn next(&mut self) {
-        self.cpu.next( &mut self.peripherals );
+    pub fn next(&mut self) -> bool {
+        self.cpu.next( &mut self.peripherals )
     }
 }
 
@@ -151,9 +155,28 @@ fn read_binary( target_addr: u16, machine : &mut Machine, filename:&str ) {
 }
 
 
+type KeyVec = Rc<RefCell<Vec<u32>>>;
+
+struct Input {
+    keys: KeyVec,
+}
+
+impl Input {
+    fn new(data: &KeyVec) -> Input {
+        Input { keys: data.clone() }
+    }
+}
+
+impl minifb::InputCallback for Input {
+    fn add_char(&mut self, uni_char: u32) {
+        self.keys.as_ref().borrow_mut().push(uni_char);
+        //println!("added key {} len {} ", uni_char, self.keys.as_ref().borrow().len());
+    }
+}
+
 fn main() {
 
-    let verbose = 0;
+    let verbose = 300;
 
     println!("Starting Z80_Take1 v0.1a!");
     let mut machine = Machine::new(verbose);
@@ -174,8 +197,12 @@ fn main() {
     )
     .expect("Unable to create window");
 
+    let keys_data = KeyVec::new(RefCell::new(Vec::new()));
+    let input = Box::new(Input::new(&keys_data));
+            
     // Limit to max ~60 fps update rate
     window.limit_update_rate(Some(std::time::Duration::from_micros(16600)));
+    window.set_input_callback(input);
 
     let mut buffer: Vec<u32> = Vec::with_capacity(WIDTH * HEIGHT);
 
@@ -189,42 +216,72 @@ fn main() {
             buffer.resize(size.0 * size.1, 0);
         }
 
-        window.get_keys().iter().for_each(|key| match key {
-            Key::W => println!("holding w!"),
-            Key::T => println!("holding t!"),
-            _ => (),
-        });
+        // window.get_keys().iter().for_each(|key| match key {
+        //     Key::W => println!("holding w!"),
+        //     Key::T => println!("holding t!"),
+        //     _ => (),
+        // });
 
-        window.get_keys_released().iter().for_each(|key| match key {
-            Key::W => println!("released w!"),
-            Key::T => println!("released t!"),
-            _ => (),
-        });
+        // window.get_keys_released().iter().for_each(|key|  {
+        //     println!("Release {:?}", key);
+        // });
 
         window
             .update_with_buffer(&buffer, new_size.0, new_size.1)
             .unwrap();
 
-        while let Some(ch) = machine.peripherals.get_out_char() {
-            print!( "{}", char::from( ch ) );
-        }
 
-        if verbose > 10 {
-            println!(" PC:0x{:04X} a:0x{:02X} bc:0x{:04X} de:0x{:04X} hl:0x{:04X} sp:0x{:04X}", 
+
+
+        // while let cc = Some(keys_data.as_ref().borrow_mut().pop() ) {
+        //         println!("POPPING {:?}", cc);
+        // }
+        for t in keys_data.as_ref().borrow_mut().iter() {
+            machine.peripherals.add_in_key(*t as u8);
+            // println!("Code point: {},   Character: {:?}", *t, char::from_u32(*t));
+        }
+        keys_data.as_ref().borrow_mut().clear();
+
+
+
+        for _ in 0..1000 {
+            if verbose > 10 {
+                println!(" PC:0x{:04X} a:0x{:02X} bc:0x{:04X} de:0x{:04X} hl:0x{:04X} sp:0x{:04X} (0xFFOD) 0x{:02X}", 
                 machine.cpu.pc, 
                 machine.cpu.registers.a,
                 machine.cpu.registers.get_bc(),
                 machine.cpu.registers.get_de(),
                 machine.cpu.registers.get_hl(),
-                machine.cpu.registers.sp);
+                machine.cpu.registers.sp,
+                machine.peripherals.mem[0xFF0D]);
+            }
+            if !machine.next() {
+                // sleep(100);
+                while let Some(ch) = machine.peripherals.get_out_char() {
+                    print!( "{}", char::from( ch ) );
+                    drop( stdout().flush());
+                }
+                println!("***** HALTED ************");
+                sleep(100000);
+
+            } else {
+                // sleep(100);
+                while let Some(ch) = machine.peripherals.get_out_char() {
+                    print!( "{}", char::from( ch ) );
+                    drop( stdout().flush());
+                }
+            }    
         }
 
-        if cycles %100  == 0 {
-            stdout().flush();
+        while let Some(ch) = machine.peripherals.get_out_char() {
+            print!( "{}", char::from( ch ) );
+            drop( stdout().flush());
         }
+        if cycles %10  == 0 {
+            drop( stdout().flush());
+        }        
 
-        machine.next();
-        sleep(10);
         cycles+=1;
     }
+    sleep(1);
 }

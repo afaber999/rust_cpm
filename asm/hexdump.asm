@@ -39,7 +39,7 @@ hexdump_loop:
     ld      a,l
     and     0x0f
     jr      z,hexdump0n
-    cp      0x08            ; put an extra space between positiioons 7 and 8
+    cp      0x08            ; put an extra space between positions 7 and 8
     jr      nz,hd_not8
     ld      b,' '
     call    sioa_tx_char
