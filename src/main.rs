@@ -1,4 +1,6 @@
 use minifb::{Key, ScaleMode, Window, WindowOptions};
+use anyhow::{Result};
+
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -12,11 +14,11 @@ use std::fs::File;
 use std::io::Read;
 use std::io::stdout;
 use std::io::Write;
-
 use cpu::Cpu;
 use cpu::MemIoAccess;
 
 use std::{thread, time};
+
 
 fn sleep(millis: u64) {
     let duration = time::Duration::from_millis(millis);
@@ -38,7 +40,7 @@ impl Peripherals {
             verbose,
             last_serial_a : 0,
             last_serial_b : 0,
-            mem       : [0;65536],
+            mem       : [0x76;65536],
             in_keys   : VecDeque::with_capacity(128),
             out_chars : VecDeque::with_capacity(128),
         }
@@ -174,8 +176,9 @@ impl minifb::InputCallback for Input {
     }
 }
 
-fn main() {
-
+fn main() -> Result<()> {
+    let mut trace_file = File::create("trace.txt")?;
+    writeln!( trace_file, "Starting tracer" ).expect("tracerr");
     let verbose = 0;
 
     println!("Starting Z80_Take1 v0.1a!");
@@ -245,24 +248,36 @@ fn main() {
 
 
         for _ in 0..1000 {
+
+            writeln!( trace_file, " PC:0x{:04X} a:0x{:02X} bc:0x{:04X} de:0x{:04X} hl:0x{:04X} sp:0x{:04X} (HL) 0x{:02X}", 
+                            machine.cpu.pc, 
+                            machine.cpu.registers.a,
+                            machine.cpu.registers.get_bc(),
+                            machine.cpu.registers.get_de(),
+                            machine.cpu.registers.get_hl(),
+                            machine.cpu.registers.sp,
+                            machine.peripherals.mem[machine.cpu.registers.get_hl() as usize]).expect("TRACEERR");
+
             if verbose > 10 {
-                println!(" PC:0x{:04X} a:0x{:02X} bc:0x{:04X} de:0x{:04X} hl:0x{:04X} sp:0x{:04X} (0xFFOD) 0x{:02X}", 
+                println!(" PC:0x{:04X} a:0x{:02X} bc:0x{:04X} de:0x{:04X} hl:0x{:04X} sp:0x{:04X} (HL) 0x{:02X}", 
                 machine.cpu.pc, 
                 machine.cpu.registers.a,
                 machine.cpu.registers.get_bc(),
                 machine.cpu.registers.get_de(),
                 machine.cpu.registers.get_hl(),
                 machine.cpu.registers.sp,
-                machine.peripherals.mem[0xFF0D]);
+                machine.peripherals.mem[machine.cpu.registers.get_hl() as usize]);
             }
             if !machine.next() {
                 // sleep(100);
                 while let Some(ch) = machine.peripherals.get_out_char() {
                     print!( "{}", char::from( ch ) );
                     drop( stdout().flush());
+                    writeln!(trace_file, "----------- IN {} ------------ ", char::from( ch )).expect("TRACEERRR");
                 }
                 println!("***** HALTED ************");
-                sleep(100000);
+                // sleep(100000);
+                panic!("HALTED at {:04X}", machine.cpu.pc);
 
             } else {
                 // sleep(100);
@@ -284,4 +299,6 @@ fn main() {
         cycles+=1;
     }
     sleep(1);
+    drop( trace_file);
+    Ok(())
 }
