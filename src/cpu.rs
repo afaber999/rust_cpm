@@ -280,6 +280,11 @@ impl Cpu {
         u16::wrapping_add( lo, hi << 8 )
     }
 
+    fn set_mem_word( memio: &mut dyn MemIoAccess, addr : u16, val : u16) {
+        memio.write_mem( addr, (val >> 8) as u8);
+        memio.write_mem( u16::wrapping_add(addr, 1), (val & 0xFF) as u8 );
+    }
+
     fn get_r_src(op_byte : u8 ) -> u8 {
         op_byte & 0b00000111
     }
@@ -499,14 +504,6 @@ impl Cpu {
                 let val = self.next_byte(memio);
                 memio.write_mem( addr, val );
                 self.add_states(10);
-            },
-
-            // ** EX (SP), HL **
-            0xE3 => {
-                let addr = self.registers.get_hl();
-                memio.write_mem(addr                      , (self.registers.sp & 0xFF) as u8);
-                memio.write_mem(u16::wrapping_add(addr, 1), (self.registers.sp >> 8  ) as u8);                
-                self.add_states(19);
             },
 
             //** INC BC **
@@ -1091,6 +1088,64 @@ impl Cpu {
                 self.add_states(4);
             },
 
+            // ** EX DE, HL **
+            0xEB => {
+                let swp = self.registers.get_hl();
+                self.registers.set_hl(self.registers.get_de());
+                self.registers.set_de( swp );
+                self.add_states(4);
+            },
+            // ** EX AF, AF' **
+            0x08 => {
+                let swp = self.registers.a;
+                self.registers.a  = self.registers.a2;
+                self.registers.a2 = swp;
+
+                let swp = self.registers.get_f();
+                self.registers.set_f( self.registers.f2 );
+                self.registers.f2 = swp;
+
+                self.add_states(4);
+            },
+
+            // ** EXX **
+            0xD9 => {
+                let swp = self.registers.b;
+                self.registers.b = self.registers.b2;
+                self.registers.b2 = swp;
+
+                let swp = self.registers.c;
+                self.registers.c = self.registers.c2;
+                self.registers.c2 = swp;
+                
+                let swp = self.registers.d;
+                self.registers.d = self.registers.d2;
+                self.registers.d2 = swp;
+
+                let swp = self.registers.e;
+                self.registers.e = self.registers.e2;
+                self.registers.e2 = swp;
+
+                let swp = self.registers.h;
+                self.registers.h = self.registers.h2;
+                self.registers.h2 = swp;
+
+                let swp = self.registers.l;
+                self.registers.l = self.registers.l2;
+                self.registers.l2 = swp;
+
+                self.add_states(4);
+            },
+
+            // ** EX (SP), HL **
+            0xE3 => {
+                let swp = Cpu::get_mem_word(memio, self.registers.sp);
+                Cpu::set_mem_word(memio, self.registers.sp, self.registers.get_hl());
+                self.registers.set_hl(swp);
+                
+                self.add_states(19);
+            },
+
             // ** EXTENDED ED SECTIONS **
             0xDD => { 
                 let ext_op_byte = self.next_byte(memio);
@@ -1124,9 +1179,9 @@ impl Cpu {
 
                     // ** EX (SP), IX **
                     0xE3 => {
-                        let addr = self.registers.get_hl();
-                        memio.write_mem(addr                      , (self.registers.ix & 0xFF) as u8);
-                        memio.write_mem(u16::wrapping_add(addr, 1), (self.registers.ix >> 8  ) as u8);                
+                        let swp = Cpu::get_mem_word(memio, self.registers.sp);
+                        Cpu::set_mem_word(memio, self.registers.sp, self.registers.ix);
+                        self.registers.ix = swp;
                         self.add_states(23);
                     },
 
@@ -1349,7 +1404,7 @@ impl Cpu {
                         self.registers.b = memio.read_mem(u16::wrapping_add(addr, 1));
                         self.add_states(20);
                     },
-                    
+
                     // **LD DE, (nn)
                     0x5B => { 
                         let addr = self.next_word(memio);
@@ -1486,9 +1541,9 @@ impl Cpu {
 
                     // ** EX (SP), IY **
                     0xE3 => {
-                        let addr = self.registers.get_hl();
-                        memio.write_mem(addr                      , (self.registers.iy & 0xFF) as u8);
-                        memio.write_mem(u16::wrapping_add(addr, 1), (self.registers.iy >> 8  ) as u8);                
+                        let swp = Cpu::get_mem_word(memio, self.registers.sp);
+                        Cpu::set_mem_word(memio, self.registers.sp, self.registers.iy);
+                        self.registers.iy = swp;
                         self.add_states(23);
                     },
 

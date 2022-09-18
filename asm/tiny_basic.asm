@@ -107,15 +107,18 @@ STACK:           EQU     3EFFH           ;STACK
 ; IN THIS SECTION. THEY CAN BE REACHED WITH 'CALL'.
 ;*************************************************************
 
+BAS_LOC:           EQU    0x3000          ; LOCATION
+
 DWA:    MACRO WHERE
         DB   (WHERE >> 8) + 128
         DB   WHERE & 0FFH
         ENDM
 
         ORG    0x000
-        ;JP     START
-        ;ORG    1000H
-
+        JP     START
+        defs   BAS_LOC-3,00
+        
+        ORG    BAS_LOC
 START:
         LD SP,STACK                     ;*** COLD START ***
         JP INIT

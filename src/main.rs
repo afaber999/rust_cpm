@@ -61,6 +61,11 @@ impl MemIoAccess for Peripherals {
     }
 
     fn write_mem(&mut self, address : u16, value : u8) {
+        // AF MEMORY PROTECTION CHECK
+        // if address >= 0x3000 && address < 0x38DA {
+        //     panic!("invalid mem write to {:04X} {:02X}",address, value );
+        // }
+
         self.mem[address as usize] = value;
     }
     fn read_port(&mut self, port : u16) -> u8 {
@@ -145,7 +150,7 @@ fn read_binary( target_addr: u16, machine : &mut Machine, filename:&str ) {
             break;
         }
         for i in 0..bytes_read {
-            machine.peripherals.write_mem( lpc, fb[i]);
+            machine.peripherals.mem[ lpc as usize] = fb[i];
             if lpc == 0xFFFF {
                 panic!("Read file error, ouf of memory at {} ", i);
             }
@@ -179,7 +184,7 @@ impl minifb::InputCallback for Input {
 fn main() -> Result<()> {
     let mut trace_file = File::create("trace.txt")?;
     writeln!( trace_file, "Starting tracer" ).expect("tracerr");
-    let verbose = 0;
+    let verbose = 100;
 
     println!("Starting Z80_Take1 v0.1a!");
     let mut machine = Machine::new(verbose);
@@ -249,31 +254,36 @@ fn main() -> Result<()> {
 
         for _ in 0..1000 {
 
-            writeln!( trace_file, " PC:0x{:04X} a:0x{:02X} bc:0x{:04X} de:0x{:04X} hl:0x{:04X} sp:0x{:04X} (HL) 0x{:02X}", 
+            writeln!( trace_file, " PC:0x{:04X} f:{:08b} a:0x{:02X} bc:0x{:04X} de:0x{:04X} hl:0x{:04X} sp:0x{:04X} (HL) 0x{:02X} (PC) 0x{:02X}", 
                             machine.cpu.pc, 
+                            machine.cpu.registers.get_f(),
                             machine.cpu.registers.a,
                             machine.cpu.registers.get_bc(),
                             machine.cpu.registers.get_de(),
                             machine.cpu.registers.get_hl(),
                             machine.cpu.registers.sp,
-                            machine.peripherals.mem[machine.cpu.registers.get_hl() as usize]).expect("TRACEERR");
+                            machine.peripherals.mem[machine.cpu.registers.get_hl() as usize],
+                            machine.peripherals.mem[machine.cpu.pc as usize],
+                        ).expect("TRACEERR");
 
             if verbose > 10 {
-                println!(" PC:0x{:04X} a:0x{:02X} bc:0x{:04X} de:0x{:04X} hl:0x{:04X} sp:0x{:04X} (HL) 0x{:02X}", 
+                println!(" PC:0x{:04X} f:{:08b} :0x{:02X} bc:0x{:04X} de:0x{:04X} hl:0x{:04X} sp:0x{:04X} (SP) 0x{:02X} (HL) 0x{:02X} (PC) 0x{:02X}", 
                 machine.cpu.pc, 
+                machine.cpu.registers.get_f(),
                 machine.cpu.registers.a,
                 machine.cpu.registers.get_bc(),
                 machine.cpu.registers.get_de(),
                 machine.cpu.registers.get_hl(),
                 machine.cpu.registers.sp,
-                machine.peripherals.mem[machine.cpu.registers.get_hl() as usize]);
+                machine.peripherals.mem[machine.cpu.registers.sp as usize],
+                machine.peripherals.mem[machine.cpu.registers.get_hl() as usize],
+                machine.peripherals.mem[machine.cpu.pc as usize]);
             }
             if !machine.next() {
                 // sleep(100);
                 while let Some(ch) = machine.peripherals.get_out_char() {
                     print!( "{}", char::from( ch ) );
                     drop( stdout().flush());
-                    writeln!(trace_file, "----------- IN {} ------------ ", char::from( ch )).expect("TRACEERRR");
                 }
                 println!("***** HALTED ************");
                 // sleep(100000);
@@ -284,6 +294,7 @@ fn main() -> Result<()> {
                 while let Some(ch) = machine.peripherals.get_out_char() {
                     print!( "{}", char::from( ch ) );
                     drop( stdout().flush());
+                    writeln!(trace_file, "----------- IN {} ------------ ", char::from( ch )).expect("TRACEERRR");
                 }
             }    
         }

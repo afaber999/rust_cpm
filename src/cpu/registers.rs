@@ -28,18 +28,9 @@ pub struct Registers {
     pub c2   : u8,
     pub d2   : u8,
     pub e2   : u8,
+    pub f2   : u8,
     pub h2   : u8,
     pub l2   : u8,    
-
-    // register f
-    pub flag_s2 : bool,
-    pub flag_z2 : bool,
-    pub flag_x2 : bool,
-    pub flag_h2 : bool,
-    pub flag_y2 : bool,
-    pub flag_p2 : bool,
-    pub flag_n2 : bool,
-    pub flag_c2 : bool,
 
     pub ix2 : u16,
     pub iy2 : u16,
@@ -78,17 +69,9 @@ impl Registers {
             c2   : 0,
             d2   : 0,
             e2   : 0,
+            f2   : 0,
             h2   : 0,
             l2   : 0,    
-
-            flag_s2 : false,
-            flag_z2 : false,
-            flag_x2 : false,
-            flag_h2 : false,
-            flag_y2 : false,
-            flag_p2 : false,
-            flag_n2 : false,
-            flag_c2 : false,
 
             ix2 : 0,
             iy2 : 0,
